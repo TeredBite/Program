@@ -1,0 +1,292 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <Windows.h>
+using namespace std;
+
+class Record
+{
+private:
+    string date;
+    double temp = 0.0;
+public:
+    void setDate(const string& d) { date = d; }
+    void setTemp(double t) { temp = t; }
+    string getDate() const { return date; }
+    double getTemp() const { return temp; }
+
+    Record* ReadFromFile(char* filename, int n) {
+        Record* records = new Record[n];
+        ifstream file(filename);
+        if (!file.is_open()) {
+            cerr << "Не удалось открыть файл " << filename << endl;
+            delete[] records;
+            return nullptr;
+        }
+        for (int i = 0; i < n; i++) {
+            file >> records[i].date >> records[i].temp;
+        }
+        file.close();
+        return records;
+    }
+
+    Record* ReadFromBinaryFile(const char* filename, int n) {
+        Record* records = new Record[n];
+        ifstream file(filename, ios::binary);
+        if (!file) {
+            cerr << "Не удалось открыть бинарный файл " << filename << endl;
+            delete[] records;
+            return nullptr;
+        }
+        for (int i = 0; i < n; i++) {
+            char dateBuffer[11];
+            file.read(dateBuffer, 10);
+            dateBuffer[10] = '\0';
+
+            double temperature;
+            file.read(reinterpret_cast<char*>(&temperature), sizeof(double));
+
+            // Создаем строку и удаляем пробелы справа
+            string dateStr(dateBuffer);
+            dateStr.erase(dateStr.find_last_not_of(' ') + 1);
+            records[i].setDate(dateStr);
+            records[i].setTemp(temperature);
+        }
+        file.close();
+        return records;
+    }
+
+    friend ostream& operator<<(ostream& out, const Record& rec) {
+        out << rec.date << " " << rec.temp << endl;
+        out << "-----------------";
+        return out;
+    }
+
+    Record CalculationOutput(Record* arr, int n) {
+        if (arr == nullptr || n <= 0) {
+            cerr << "Ошибка: массив данных пуст или невалиден!" << endl;
+            return Record();
+        }
+
+        Record minRecord = arr[0];
+        for (int i = 1; i < n; i++) {
+            if (arr[i].getTemp() < minRecord.getTemp()) {
+                minRecord = arr[i];
+            }
+        }
+        return minRecord;
+    }
+
+};
+
+Record* AddRecord(Record* arr, int& n, const Record& newRecord) {
+    Record* newArr = new Record[n + 1];
+    for (int i = 0; i < n; i++) {
+        newArr[i] = arr[i];
+    }
+    newArr[n] = newRecord;
+    delete[] arr;
+    n++;
+    return newArr;
+}
+
+Record* RemoveRecord(Record* arr, int& n, int index) {
+    if (index < 0 || index >= n) {
+        cout << "Неверный индекс!" << endl;
+        return arr;
+    }
+    Record* newArr = new Record[n - 1];
+    for (int i = 0, j = 0; i < n; i++) {
+        if (i == index) continue;
+        newArr[j++] = arr[i];
+    }
+    delete[] arr;
+    n--;
+    return newArr;
+}
+
+long FileSize(istream& f) {
+    f.seekg(0, ios_base::end);
+    return f.tellg();
+}
+
+void WriteRecordsToTextFile(const char* filename, Record* records, int n) {
+    ofstream ofs(filename);
+    if (!ofs.is_open()) {
+        cerr << "Не удалось открыть файл " << filename << " для записи!" << endl;
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        ofs << records[i] << endl;
+    }
+    ofs.close();
+    cout << "Данные успешно записаны в файл " << filename << endl;
+}
+
+void WriteRecordsToBinaryFile(const char* filename, Record* records, int n) {
+    ofstream ofs(filename, ios::binary);
+    if (!ofs.is_open()) {
+        cerr << "Не удалось открыть файл " << filename << " для записи!" << endl;
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        string date = records[i].getDate();
+        if (date.size() < 10)
+            date.append(10 - date.size(), ' ');
+        else if (date.size() > 10)
+            date = date.substr(0, 10);
+        ofs.write(date.c_str(), 10);
+        double temp = records[i].getTemp();
+        ofs.write(reinterpret_cast<char*>(&temp), sizeof(double));
+    }
+    ofs.close();
+    cout << "Данные успешно записаны в бинарный файл " << filename << endl;
+}
+
+int main()
+{
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+    int choice = 0;
+    cout << "Выберите метод ввода данных:" << endl;
+    cout << "1 - Чтение из текстового файла" << endl;
+    cout << "2 - Чтение из бинарного файла" << endl;
+    cin >> choice;
+    cin.ignore();
+
+    Record recordHelper;
+    Record* records = nullptr;
+    int n = 0;
+
+    if (choice == 1)
+    {
+        cout << "Введите количество строк:" << endl;
+        cin >> n;
+        cin.ignore();
+        cout << "Введите название текстового файла:" << endl;
+        char filename[100];
+        cin >> filename;
+        cin.ignore();
+        records = recordHelper.ReadFromFile(filename, n);
+    }
+    else if (choice == 2)
+    {
+        cout << "Введите количество записей:" << endl;
+        cin >> n;
+        cin.ignore();
+        cout << "Введите название бинарного файла:" << endl;
+        char filename[100];
+        cin >> filename;
+        cin.ignore();
+        records = recordHelper.ReadFromBinaryFile(filename, n);
+    }
+    else
+    {
+        cout << "Неверный выбор метода ввода!" << endl;
+        return 1;
+    }
+
+    if (records == nullptr) {
+        cout << "Ошибка при чтении файла!" << endl;
+        return 1;
+    }
+
+    int choice2 = 0;
+    do
+    {
+        cout << "\nМеню:\n";
+        cout << "1. Вывод входных данных на экран в виде таблицы\n";
+        cout << "2. Расчёт и вывод итоговых значений по массиву данных.\n";
+        cout << "3. Добавление записи в массив данных (в конец массива).\n";
+        cout << "4. Удаление записи из массива данных (по номеру записи).\n";
+        cout << "5. Запись массива данных в текстовый файл.\n";
+        cout << "6. Запись массива данных в бинарный файл.\n";
+        cout << "7. Расчет размера файла.\n";
+        cout << "8. Выход.\n";
+        cout << "Выберите пункт меню: ";
+        cin >> choice2;
+        cin.ignore();
+
+        switch (choice2)
+        {
+        case 1: {
+            for (int i = 0; i < n; i++) {
+                cout << records[i] << endl;
+            }
+            break;
+        }
+        case 2: {
+            Record minRecord = recordHelper.CalculationOutput(records, n);
+            cout << "Запись с минимальной температурой:" << endl;
+            cout << minRecord << endl;
+            break;
+        }
+        case 3: {
+            Record newRec;
+            cout << "Введите дату:" << endl;
+            string date;
+            cin >> date;
+            newRec.setDate(date);
+            cout << "Введите температуру:" << endl;
+            double temp;
+            cin >> temp;
+            newRec.setTemp(temp);
+            records = AddRecord(records, n, newRec);
+            cout << "Новая запись успешно добавлена." << endl;
+            break;
+        }
+        case 4: {
+            cout << "Введите номер записи для удаления (нумерация начинается с 1): ";
+            int recordNumber;
+            cin >> recordNumber;
+            cin.ignore();
+            int index = recordNumber - 1;
+            records = RemoveRecord(records, n, index);
+            cout << "Запись удалена." << endl;
+            break;
+        }
+        case 5: {
+            cout << "Введите имя файла для записи данных в текстовом формате:" << endl;
+            char outFilename[100];
+            cin >> outFilename;
+            cin.ignore();
+            WriteRecordsToTextFile(outFilename, records, n);
+            break;
+        }
+        case 6: {
+            cout << "Введите имя файла для записи данных в бинарном формате:" << endl;
+            char outFilename[100];
+            cin >> outFilename;
+            cin.ignore();
+            WriteRecordsToBinaryFile(outFilename, records, n);
+            break;
+        }
+        case 7: {
+            cout << "Введите имя файла для определения его размера:" << endl;
+            char sizeFilename[100];
+            cin >> sizeFilename;
+            cin.ignore();
+            ifstream file(sizeFilename);
+            if (!file.is_open()) {
+                cout << "Не удалось открыть файл для определения его размера." << endl;
+                break;
+            }
+            long size = FileSize(file);
+            cout << "Размер файла: " << size << " байт" << endl;
+            file.close();
+            break;
+        }
+        case 8: {
+            cout << "Выход из программы." << endl;
+            break;
+        }
+        default: {
+            cout << "Неверный выбор! Попробуйте снова." << endl;
+            break;
+        }
+        }
+    } while (choice2 != 8);
+
+    delete[] records;
+    return 0;
+}
